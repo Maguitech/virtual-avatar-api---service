@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Avatar Progressive Streaming</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f0f0f0;
+        }
+        
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        .upload-area {
+            border: 2px dashed #007bff;
+            padding: 40px;
+            text-align: center;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            transition: background-color 0.3s;
+        }
+        
+        .upload-area:hover {
+            background-color: #f8f9fa;
+        }
+        
+        .upload-area.dragover {
+            background-color: #e3f2fd;
+            border-color: #0056b3;
+        }
+        
+        .video-container {
+            margin: 20px 0;
+            text-align: center;
+            background: #000;
+            border-radius: 8px;
+            overflow: hidden;
+            display: none;
+        }
+        
+        .video-frame {
+            max-width: 100%;
+            height: auto;
+        }
+        
+        .progress-container {
+            margin: 20px 0;
+            display: none;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #e0e0e0;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #007bff, #28a745);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        
+        .progress-text {
+            margin-top: 10px;
+            text-align: center;
+            font-weight: bold;
+        }
+        
+        .status {
+            margin: 20px 0;
+            padding: 15px;
+            border-radius: 5px;
+            text-align: center;
+            font-weight: bold;
+            display: none;
+        }
+        
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        
+        .btn:hover {
+            background: #0056b3;
+        }
+        
+        .btn:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        
+        .stat-item {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #007bff;
+        }
+        
+        .stat-label {
+            font-size: 12px;
+            color: #6c757d;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎭 Avatar Progressive Streaming</h1>
+        <p>Upload an audio file to generate avatar video with real-time streaming!</p>
+        
+        <div class="upload-area" id="uploadArea">
+            <p>📎 Drop your audio file here or click to select</p>
+            <input type="file" id="audioInput" accept=".wav,.mp3,.m4a,.aac,.flac,.ogg,.wma" style="display: none;">
+            <button class="btn" onclick="document.getElementById('audioInput').click()">Choose Audio File</button>
+        </div>
+        
+        <div class="status" id="status"></div>
+        
+        <div class="progress-container" id="progressContainer">
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <div class="progress-text" id="progressText">Starting...</div>
+        </div>
+        
+        <div class="stats" id="stats" style="display: none;">
+            <div class="stat-item">
+                <div class="stat-value" id="currentFrame">0</div>
+                <div class="stat-label">Current Frame</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="totalFrames">0</div>
+                <div class="stat-label">Total Frames</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="framesPerSec">0</div>
+                <div class="stat-label">FPS</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="timeElapsed">0s</div>
+                <div class="stat-label">Time Elapsed</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="audioBuffer">0</div>
+                <div class="stat-label">Audio Buffer</div>
+            </div>
+        </div>
+        
+        <div class="video-container" id="videoContainer">
+            <img id="videoFrame" class="video-frame" alt="Generated Avatar Frame">
+        </div>
+    </div>
+
+    <script>
+        class ProgressiveAvatarStreamer {
+            constructor() {
+                this.eventSource = null;
+                this.startTime = null;
+                this.frameCount = 0;
+                this.totalFrames = 0;
+                
+                // Audio system
+                this.audioContext = null;
+                this.audioQueue = [];
+                this.isAudioPlaying = false;
+                this.sampleRate = 44100;
+                this.nextPlayTime = 0;
+                
+                // Video buffering system
+                this.videoFrameBuffer = new Map(); // frameId -> frameData
+                this.isVideoPlaying = false;
+                this.currentPlayingFrame = 0;
+                this.videoStartTime = null;
+                this.fps = 30;
+                this.frameDuration = 1000 / this.fps; // ms per frame
+                
+                // Buffer management
+                this.minBufferFrames = 30; // Buffer 1 second before starting
+                this.audioBufferSize = 3;
+                
+                this.setupEventListeners();
+                this.initAudioContext();
+            }
+            
+            initAudioContext() {
+                try {
+                    this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                } catch (e) {
+                    console.warn('Audio context not supported:', e);
+                }
+            }
+            
+            setupEventListeners() {
+                const uploadArea = document.getElementById('uploadArea');
+                const audioInput = document.getElementById('audioInput');
+                
+                // Drag and drop
+                uploadArea.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    uploadArea.classList.add('dragover');
+                });
+                
+                uploadArea.addEventListener('dragleave', () => {
+                    uploadArea.classList.remove('dragover');
+                });
+                
+                uploadArea.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    uploadArea.classList.remove('dragover');
+                    const files = e.dataTransfer.files;
+                    if (files.length > 0) {
+                        this.processFile(files[0]);
+                    }
+                });
+                
+                // File input
+                audioInput.addEventListener('change', (e) => {
+                    if (e.target.files.length > 0) {
+                        this.processFile(e.target.files[0]);
+                    }
+                });
+            }
+            
+            async processFile(file) {
+                this.showStatus('info', '📤 Uploading audio file...');
+                this.resetProgress();
+                
+                const formData = new FormData();
+                formData.append('audio_file', file);
+                
+                try {
+                    const response = await fetch('/generate-stream', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error('Upload failed');
+                    }
+                    
+                    this.startStreaming(response);
+                    
+                } catch (error) {
+                    this.showStatus('error', `❌ Error: ${error.message}`);
+                }
+            }
+            
+            startStreaming(response) {
+                this.startTime = Date.now();
+                this.frameCount = 0;
+                
+                this.showStatus('info', '🎬🔊 Starting avatar generation with audio...');
+                document.getElementById('progressContainer').style.display = 'block';
+                document.getElementById('videoContainer').style.display = 'block';
+                document.getElementById('stats').style.display = 'grid';
+                
+                // Initialize audio for user interaction (required for autoplay)
+                if (this.audioContext && this.audioContext.state === 'suspended') {
+                    document.addEventListener('click', async () => {
+                        await this.audioContext.resume();
+                    }, { once: true });
+                }
+                
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+                
+                const processChunk = async () => {
+                    try {
+                        const { done, value } = await reader.read();
+                        
+                        if (done) {
+                            this.showStatus('success', '✅ Avatar generation completed!');
+                            return;
+                        }
+                        
+                        buffer += decoder.decode(value, { stream: true });
+                        const lines = buffer.split('\n');
+                        buffer = lines.pop(); // Keep incomplete line in buffer
+                        
+                        for (const line of lines) {
+                            if (line.startsWith('data: ')) {
+                                try {
+                                    const data = JSON.parse(line.substring(6));
+                                    this.handleStreamData(data);
+                                } catch (e) {
+                                    console.warn('Failed to parse stream data:', e);
+                                }
+                            }
+                        }
+                        
+                        // Continue reading
+                        processChunk();
+                        
+                    } catch (error) {
+                        this.showStatus('error', `❌ Streaming error: ${error.message}`);
+                    }
+                };
+                
+                processChunk();
+            }
+            
+            handleStreamData(data) {
+                if (data.error) {
+                    this.showStatus('error', `❌ Error: ${data.error}`);
+                    return;
+                }
+                
+                if (data.status === 'started') {
+                    this.totalFrames = data.total_frames;
+                    this.sampleRate = data.sample_rate || 44100;
+                    document.getElementById('totalFrames').textContent = this.totalFrames;
+                    
+                    // Show audio info if available
+                    const audioInfo = data.audio_length ? ` (${data.audio_length.toFixed(1)}s audio)` : '';
+                    this.showStatus('info', `🎬🔊 Buffered streaming ${this.totalFrames} frames${audioInfo}...`);
+                    return;
+                }
+                
+                if (data.frame_data) {
+                    // Add frame to buffer instead of displaying immediately
+                    this.videoFrameBuffer.set(data.frame_id, {
+                        frameData: data.frame_data,
+                        audioChunk: data.audio_chunk,
+                        timestamp: Date.now()
+                    });
+                    
+                    this.frameCount = data.frame_id + 1;
+                    
+                    // Start playback when we have enough buffered frames
+                    if (!this.isVideoPlaying && this.videoFrameBuffer.size >= this.minBufferFrames) {
+                        this.startSynchronizedPlayback();
+                    }
+                    
+                    // Update progress (generation progress, not playback progress)
+                    const generationProgress = (this.frameCount / data.total_frames) * 100;
+                    
+                    // Update stats
+                    document.getElementById('currentFrame').textContent = this.isVideoPlaying ? this.currentPlayingFrame : 0;
+                    document.getElementById('totalFrames').textContent = data.total_frames;
+                    
+                    const timeElapsed = (Date.now() - this.startTime) / 1000;
+                    document.getElementById('timeElapsed').textContent = `${timeElapsed.toFixed(1)}s`;
+                    
+                    const generationFps = this.frameCount / timeElapsed;
+                    document.getElementById('framesPerSec').textContent = `${generationFps.toFixed(1)} gen`;
+                    
+                    // Buffer status
+                    const videoBufferSize = this.videoFrameBuffer.size;
+                    const audioBufferSize = this.audioQueue.length;
+                    const bufferHealth = videoBufferSize >= this.minBufferFrames ? '✅' : 
+                                       videoBufferSize > 10 ? '⚠️' : '❌';
+                    document.getElementById('audioBuffer').textContent = `V:${videoBufferSize} A:${audioBufferSize} ${bufferHealth}`;
+                    
+                    // Update progress bar to show generation, not playback
+                    document.getElementById('progressFill').style.width = `${generationProgress}%`;
+                    document.getElementById('progressText').textContent = 
+                        `Generating ${this.frameCount}/${data.total_frames} | Buffer: ${videoBufferSize} frames`;
+                    
+                    const playbackStatus = this.isVideoPlaying ? '▶️' : (videoBufferSize >= this.minBufferFrames ? '🔄' : '⏳');
+                    this.showStatus('info', `🎬${playbackStatus} Buffering ${this.frameCount}/${data.total_frames}...`);
+                }
+                
+                if (data.completed) {
+                    this.showStatus('success', '✅🔊 Avatar streaming completed! Audio buffer will finish playing...');
+                    
+                    // Stop adding new audio but let buffer finish
+                    setTimeout(() => {
+                        this.showStatus('success', '✅🎬 Complete! Video with smooth audio ready!');
+                    }, 2000);
+                }
+            }
+            
+            showStatus(type, message) {
+                const status = document.getElementById('status');
+                status.className = `status ${type}`;
+                status.textContent = message;
+                status.style.display = 'block';
+            }
+            
+            async playAudioChunk(audioChunkB64) {
+                if (!this.audioContext) return;
+                
+                try {
+                    // Resume audio context if suspended (browser autoplay policy)
+                    if (this.audioContext.state === 'suspended') {
+                        await this.audioContext.resume();
+                    }
+                    
+                    // Decode base64 to array buffer
+                    const audioData = Uint8Array.from(atob(audioChunkB64), c => c.charCodeAt(0));
+                    
+                    // Decode audio data
+                    const audioBuffer = await this.audioContext.decodeAudioData(audioData.buffer.slice());
+                    
+                    // Add to queue for buffered playback
+                    this.audioQueue.push(audioBuffer);
+                    
+                    // Adaptive buffer size based on network conditions
+                    if (this.adaptiveBuffering && this.frameCount > 10) {
+                        const avgGenerationTime = (Date.now() - this.startTime) / this.frameCount;
+                        if (avgGenerationTime > 100) { // If slow, increase buffer
+                            this.bufferSize = Math.min(4, this.maxBufferSize);
+                        } else if (avgGenerationTime < 50) { // If fast, decrease buffer for lower latency
+                            this.bufferSize = Math.max(1, 2);
+                        }
+                    }
+                    
+                    // Start playback when buffer is ready or for first chunk
+                    if (!this.isAudioPlaying && (this.audioQueue.length >= this.bufferSize || this.frameCount === 1)) {
+                        this.startBufferedAudioPlayback();
+                    }
+                    
+                } catch (error) {
+                    console.warn('Audio playback error:', error);
+                }
+            }
+            
+            startBufferedAudioPlayback() {
+                if (!this.audioContext || this.isAudioPlaying) return;
+                
+                this.isAudioPlaying = true;
+                this.nextPlayTime = this.audioContext.currentTime;
+                this.processAudioQueue();
+            }
+            
+            processAudioQueue() {
+                if (!this.isAudioPlaying) return;
+                
+                // Process all available audio chunks
+                while (this.audioQueue.length > 0) {
+                    const audioBuffer = this.audioQueue.shift();
+                    
+                    // Create buffer source
+                    const source = this.audioContext.createBufferSource();
+                    source.buffer = audioBuffer;
+                    source.connect(this.audioContext.destination);
+                    
+                    // Schedule playback at precise time
+                    source.start(this.nextPlayTime);
+                    
+                    // Calculate next play time (seamless continuation)
+                    this.nextPlayTime += audioBuffer.duration;
+                }
+                
+                // Schedule next processing with dynamic interval
+                const checkInterval = this.audioQueue.length > 0 ? 20 : 100; // Faster when data available
+                setTimeout(() => {
+                    if (this.isAudioPlaying) {
+                        this.processAudioQueue();
+                    }
+                }, checkInterval);
+            }
+            
+            stopAudio() {
+                this.isAudioPlaying = false;
+                this.audioQueue = [];
+                this.nextPlayTime = 0;
+            }
+            
+            startSynchronizedPlayback() {
+                if (this.isVideoPlaying) return;
+                
+                console.log('Starting synchronized video + audio playback');
+                this.isVideoPlaying = true;
+                this.videoStartTime = Date.now();
+                this.currentPlayingFrame = 0;
+                
+                // Start video playback loop
+                this.playVideoLoop();
+                
+                this.showStatus('info', '▶️🎬🔊 Playing synchronized video + audio...');
+            }
+            
+            playVideoLoop() {
+                if (!this.isVideoPlaying) return;
+                
+                const currentTime = Date.now();
+                const elapsedMs = currentTime - this.videoStartTime;
+                const targetFrame = Math.floor(elapsedMs / this.frameDuration);
+                
+                // Display frame if available
+                if (this.videoFrameBuffer.has(targetFrame)) {
+                    const frameData = this.videoFrameBuffer.get(targetFrame);
+                    const videoFrame = document.getElementById('videoFrame');
+                    videoFrame.src = `data:image/jpeg;base64,${frameData.frameData}`;
+                    
+                    // Play audio for this frame if available
+                    if (frameData.audioChunk && this.audioContext) {
+                        this.playFrameAudio(frameData.audioChunk);
+                    }
+                    
+                    this.currentPlayingFrame = targetFrame;
+                    
+                    // Clean up old frames to save memory
+                    if (targetFrame > 30) {
+                        this.videoFrameBuffer.delete(targetFrame - 30);
+                    }
+                } else if (this.currentPlayingFrame < this.frameCount - 1) {
+                    // Frame not ready but should exist - pause and show buffering
+                    this.showStatus('info', '⏳🎬 Buffering... waiting for frame ' + targetFrame);
+                }
+                
+                // Continue loop
+                requestAnimationFrame(() => this.playVideoLoop());
+            }
+            
+            async playFrameAudio(audioChunkB64) {
+                if (!this.audioContext) return;
+                
+                try {
+                    if (this.audioContext.state === 'suspended') {
+                        await this.audioContext.resume();
+                    }
+                    
+                    const audioData = Uint8Array.from(atob(audioChunkB64), c => c.charCodeAt(0));
+                    const audioBuffer = await this.audioContext.decodeAudioData(audioData.buffer.slice());
+                    
+                    // Play immediately - synchronized with video frame
+                    const source = this.audioContext.createBufferSource();
+                    source.buffer = audioBuffer;
+                    source.connect(this.audioContext.destination);
+                    source.start();
+                    
+                } catch (error) {
+                    console.warn('Frame audio error:', error);
+                }
+            }
+            
+            resetProgress() {
+                document.getElementById('progressContainer').style.display = 'none';
+                document.getElementById('videoContainer').style.display = 'none';
+                document.getElementById('stats').style.display = 'none';
+                document.getElementById('progressFill').style.width = '0%';
+                document.getElementById('progressText').textContent = 'Starting...';
+                
+                // Reset audio
+                this.stopAudio();
+            }
+        }
+        
+        // Initialize the streamer when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            new ProgressiveAvatarStreamer();
+        });
+    </script>
+</body>
+</html>

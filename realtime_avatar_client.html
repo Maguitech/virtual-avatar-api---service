@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-time Avatar Chat</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+        }
+        
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+        
+        button {
+            padding: 12px 24px;
+            font-size: 16px;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: bold;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+        
+        .btn-primary {
+            background: linear-gradient(45deg, #FF6B6B, #4ECDC4);
+            color: white;
+        }
+        
+        .btn-secondary {
+            background: linear-gradient(45deg, #A8E6CF, #7FCDCD);
+            color: #333;
+        }
+        
+        .btn-danger {
+            background: linear-gradient(45deg, #FF8A80, #FF5722);
+            color: white;
+        }
+        
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .status {
+            text-align: center;
+            margin: 20px 0;
+            padding: 10px;
+            border-radius: 10px;
+            font-weight: bold;
+        }
+        
+        .status.connected {
+            background: rgba(76, 175, 80, 0.3);
+            border: 2px solid #4CAF50;
+        }
+        
+        .status.disconnected {
+            background: rgba(244, 67, 54, 0.3);
+            border: 2px solid #F44336;
+        }
+        
+        .status.processing {
+            background: rgba(255, 193, 7, 0.3);
+            border: 2px solid #FFC107;
+        }
+        
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-top: 30px;
+        }
+        
+        @media (max-width: 768px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .panel {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .panel h3 {
+            margin-top: 0;
+            color: #FFE082;
+            border-bottom: 2px solid #FFE082;
+            padding-bottom: 10px;
+        }
+        
+        .text-input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            font-size: 16px;
+            margin-bottom: 15px;
+        }
+        
+        .text-input::placeholder {
+            color: rgba(255, 255, 255, 0.7);
+        }
+        
+        .transcription {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            padding: 15px;
+            margin: 15px 0;
+            min-height: 100px;
+            border-left: 4px solid #4ECDC4;
+        }
+        
+        .transcription h4 {
+            margin-top: 0;
+            color: #4ECDC4;
+        }
+        
+        .video-container {
+            text-align: center;
+            margin: 20px 0;
+        }
+        
+        .avatar-video {
+            max-width: 100%;
+            border-radius: 15px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            background: #000;
+        }
+        
+        .log {
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 10px;
+            padding: 15px;
+            margin: 20px 0;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+        }
+        
+        .log-entry {
+            margin: 5px 0;
+            padding: 5px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .log-entry:last-child {
+            border-bottom: none;
+        }
+        
+        .timestamp {
+            color: #FFE082;
+            font-size: 12px;
+        }
+        
+        .audio-visualizer {
+            height: 50px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            margin: 15px 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .audio-bars {
+            display: flex;
+            gap: 2px;
+            height: 100%;
+            align-items: center;
+        }
+        
+        .audio-bar {
+            width: 3px;
+            background: linear-gradient(to top, #FF6B6B, #4ECDC4);
+            border-radius: 2px;
+            transition: height 0.1s ease;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🤖 Real-time Avatar Chat</h1>
+        
+        <div class="controls">
+            <button id="connectBtn" class="btn-primary">🔌 Conectar</button>
+            <button id="recordBtn" class="btn-secondary" disabled>🎤 Iniciar Grabación</button>
+            <button id="stopBtn" class="btn-danger" disabled>⏹️ Detener</button>
+        </div>
+        
+        <div id="status" class="status disconnected">
+            🔴 Desconectado
+        </div>
+        
+        <div class="main-content">
+            <!-- Audio Input Panel -->
+            <div class="panel">
+                <h3>🎤 Entrada de Audio</h3>
+                
+                <div class="audio-visualizer">
+                    <div class="audio-bars" id="audioBars">
+                        <!-- Audio bars will be generated here -->
+                    </div>
+                </div>
+                
+                <div class="transcription">
+                    <h4>📝 Transcripción:</h4>
+                    <div id="transcriptionText">Hable para ver la transcripción aquí...</div>
+                </div>
+                
+                <div>
+                    <input type="text" class="text-input" id="textInput" 
+                           placeholder="O escriba texto directamente...">
+                    <button id="sendTextBtn" class="btn-secondary" disabled>📤 Enviar Texto</button>
+                </div>
+            </div>
+            
+            <!-- Avatar Output Panel -->
+            <div class="panel">
+                <h3>🎭 Avatar en Vivo</h3>
+                
+                <div class="video-container" style="position: relative;">
+                    <!-- Background loop video (always playing) -->
+                    <video id="backgroundVideo" class="avatar-video" loop muted autoplay playsinline style="display: block;">
+                        <source src="http://localhost:8080/data/preload/bg_video_h264.mp4" type="video/mp4">
+                        <source src="http://localhost:8080/data/preload/bg_video.mp4" type="video/mp4">
+                        <source src="./data/preload/bg_video_h264.mp4" type="video/mp4">
+                        <source src="./data/preload/bg_video.mp4" type="video/mp4">
+                        Tu navegador no soporta video HTML5.
+                    </video>
+                    
+                    <!-- Response video (overlays on top when available) -->
+                    <video id="avatarVideo" class="avatar-video" style="display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%;">
+                        Tu navegador no soporta video HTML5.
+                    </video>
+                    
+                    <div id="videoPlaceholder" style="height: 300px; background: rgba(0,0,0,0.3); 
+                         border-radius: 15px; display: none; align-items: center; 
+                         justify-content: center; font-size: 18px; position: absolute; top: 0; left: 0; width: 100%;">
+                        🎭 Iniciando avatar...
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="panel">
+            <h3>📋 Registro de Actividad</h3>
+            <div id="log" class="log">
+                <div class="log-entry">
+                    <span class="timestamp">[Inicio]</span> Sistema iniciado. Haga clic en "Conectar" para empezar.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class RealTimeAvatarClient {
+            constructor() {
+                this.ws = null;
+                this.mediaRecorder = null;
+                this.audioStream = null;
+                this.isConnected = false;
+                this.isRecording = false;
+                
+                this.initializeElements();
+                this.initializeAudioBars();
+                this.setupEventListeners();
+            }
+            
+            initializeElements() {
+                this.connectBtn = document.getElementById('connectBtn');
+                this.recordBtn = document.getElementById('recordBtn');
+                this.stopBtn = document.getElementById('stopBtn');
+                this.sendTextBtn = document.getElementById('sendTextBtn');
+                this.textInput = document.getElementById('textInput');
+                this.status = document.getElementById('status');
+                this.transcriptionText = document.getElementById('transcriptionText');
+                this.backgroundVideo = document.getElementById('backgroundVideo');
+                this.avatarVideo = document.getElementById('avatarVideo');
+                this.videoPlaceholder = document.getElementById('videoPlaceholder');
+                this.logContainer = document.getElementById('log');
+                this.audioBars = document.getElementById('audioBars');
+                
+                // Setup background video events
+                this.setupBackgroundVideo();
+            }
+            
+            initializeAudioBars() {
+                // Create audio visualization bars
+                for (let i = 0; i < 20; i++) {
+                    const bar = document.createElement('div');
+                    bar.className = 'audio-bar';
+                    bar.style.height = '5px';
+                    this.audioBars.appendChild(bar);
+                }
+            }
+            
+            setupBackgroundVideo() {
+                // Handle background video events
+                this.backgroundVideo.addEventListener('error', (e) => {
+                    console.log('Background video error:', e);
+                    console.log('Video error details:', this.backgroundVideo.error);
+                    this.log('❌ Error cargando video de fondo - creando avatar animado...');
+                    this.createAnimatedBackground();
+                });
+                
+                this.backgroundVideo.addEventListener('loadstart', () => {
+                    this.log('🎬 Cargando video de fondo...');
+                    console.log('Video sources:', Array.from(this.backgroundVideo.children).map(s => s.src));
+                });
+                
+                this.backgroundVideo.addEventListener('loadedmetadata', () => {
+                    this.log('📊 Metadatos del video cargados');
+                    console.log(`Video: ${this.backgroundVideo.videoWidth}x${this.backgroundVideo.videoHeight}, ${this.backgroundVideo.duration}s`);
+                });
+                
+                this.backgroundVideo.addEventListener('canplay', () => {
+                    this.log('🎭 Video de fondo listo para reproducir');
+                    this.videoPlaceholder.style.display = 'none';
+                });
+                
+                this.backgroundVideo.addEventListener('loadeddata', () => {
+                    this.log('✅ Video de fondo cargado correctamente');
+                    this.backgroundVideo.play().then(() => {
+                        this.log('▶️ Video de fondo reproduciéndose en bucle');
+                    }).catch(e => {
+                        console.log('Error playing background video:', e);
+                        this.log('❌ No se pudo reproducir el video - usando avatar animado');
+                        this.createAnimatedBackground();
+                    });
+                });
+                
+                this.backgroundVideo.addEventListener('playing', () => {
+                    this.log('🎬 Video de fondo reproduciéndose');
+                });
+                
+                // Force load attempt
+                this.backgroundVideo.load();
+                
+                // Try to load the video
+                setTimeout(() => {
+                    console.log('Video readyState:', this.backgroundVideo.readyState);
+                    if (this.backgroundVideo.readyState === 0) {
+                        this.log('⚠️ Video de fondo no se pudo cargar - usando avatar animado');
+                        this.createAnimatedBackground();
+                    }
+                }, 5000);
+            }
+            
+            createAnimatedBackground() {
+                // Create animated avatar background instead of video
+                this.backgroundVideo.style.display = 'none';
+                this.videoPlaceholder.style.display = 'flex';
+                this.videoPlaceholder.innerHTML = `
+                    <div style="text-align: center;">
+                        <div style="font-size: 120px; margin-bottom: 20px; animation: pulse 2s infinite;">🤖</div>
+                        <div style="font-size: 18px;">Avatar en espera...</div>
+                        <div style="font-size: 14px; opacity: 0.8; margin-top: 10px;">Listo para responder</div>
+                    </div>
+                `;
+                
+                // Add CSS animation if not already present
+                if (!document.getElementById('avatarAnimation')) {
+                    const style = document.createElement('style');
+                    style.id = 'avatarAnimation';
+                    style.textContent = `
+                        @keyframes pulse {
+                            0% { transform: scale(1); opacity: 0.8; }
+                            50% { transform: scale(1.1); opacity: 1; }
+                            100% { transform: scale(1); opacity: 0.8; }
+                        }
+                    `;
+                    document.head.appendChild(style);
+                }
+            }
+            
+            setupEventListeners() {
+                this.connectBtn.addEventListener('click', () => this.connect());
+                this.recordBtn.addEventListener('click', () => this.startRecording());
+                this.stopBtn.addEventListener('click', () => this.stopRecording());
+                this.sendTextBtn.addEventListener('click', () => this.sendText());
+                
+                this.textInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        this.sendText();
+                    }
+                });
+            }
+            
+            connect() {
+                if (this.isConnected) {
+                    this.disconnect();
+                    return;
+                }
+                
+                this.log('🔌 Conectando al servidor...');
+                this.updateStatus('connecting', '🟡 Conectando...');
+                
+                try {
+                    this.ws = new WebSocket('ws://localhost:8765');
+                    
+                    this.ws.onopen = () => {
+                        this.isConnected = true;
+                        this.updateStatus('connected', '🟢 Conectado');
+                        this.connectBtn.textContent = '🔌 Desconectar';
+                        this.recordBtn.disabled = false;
+                        this.sendTextBtn.disabled = false;
+                        this.log('✅ Conectado al servidor WebSocket');
+                    };
+                    
+                    this.ws.onmessage = (event) => {
+                        this.handleMessage(JSON.parse(event.data));
+                    };
+                    
+                    this.ws.onclose = () => {
+                        this.isConnected = false;
+                        this.updateStatus('disconnected', '🔴 Desconectado');
+                        this.connectBtn.textContent = '🔌 Conectar';
+                        this.recordBtn.disabled = true;
+                        this.sendTextBtn.disabled = true;
+                        this.log('🔌 Desconectado del servidor');
+                    };
+                    
+                    this.ws.onerror = (error) => {
+                        this.log('❌ Error de conexión: ' + error);
+                        this.updateStatus('disconnected', '🔴 Error de conexión');
+                    };
+                    
+                } catch (error) {
+                    this.log('❌ Error al conectar: ' + error);
+                    this.updateStatus('disconnected', '🔴 Error');
+                }
+            }
+            
+            disconnect() {
+                if (this.ws) {
+                    this.ws.close();
+                }
+                this.stopRecording();
+            }
+            
+            async startRecording() {
+                if (this.isRecording) {
+                    this.stopRecording();
+                    return;
+                }
+                
+                try {
+                    // Get microphone access
+                    this.audioStream = await navigator.mediaDevices.getUserMedia({
+                        audio: {
+                            sampleRate: 16000,
+                            channelCount: 1,
+                            echoCancellation: true,
+                            noiseSuppression: true
+                        }
+                    });
+                    
+                    // Setup MediaRecorder
+                    this.mediaRecorder = new MediaRecorder(this.audioStream, {
+                        mimeType: 'audio/webm;codecs=opus'
+                    });
+                    
+                    this.mediaRecorder.ondataavailable = (event) => {
+                        if (event.data.size > 0 && this.isConnected) {
+                            this.sendAudioChunk(event.data);
+                        }
+                    };
+                    
+                    // Record in 3-second chunks
+                    this.mediaRecorder.start(3000);
+                    this.isRecording = true;
+                    
+                    this.recordBtn.textContent = '⏸️ Pausar';
+                    this.stopBtn.disabled = false;
+                    this.updateStatus('recording', '🎤 Grabando...');
+                    this.log('🎤 Grabación iniciada');
+                    
+                    // Start audio visualization
+                    this.startAudioVisualization();
+                    
+                } catch (error) {
+                    this.log('❌ Error al acceder al micrófono: ' + error);
+                    alert('Error al acceder al micrófono. Verifique los permisos.');
+                }
+            }
+            
+            stopRecording() {
+                if (this.mediaRecorder && this.isRecording) {
+                    this.mediaRecorder.stop();
+                    this.isRecording = false;
+                }
+                
+                if (this.audioStream) {
+                    this.audioStream.getTracks().forEach(track => track.stop());
+                    this.audioStream = null;
+                }
+                
+                this.recordBtn.textContent = '🎤 Iniciar Grabación';
+                this.stopBtn.disabled = true;
+                this.updateStatus('connected', '🟢 Conectado');
+                this.log('⏹️ Grabación detenida');
+                
+                // Stop audio visualization
+                this.stopAudioVisualization();
+            }
+            
+            async sendAudioChunk(audioBlob) {
+                try {
+                    const arrayBuffer = await audioBlob.arrayBuffer();
+                    const base64Audio = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+                    
+                    const message = {
+                        type: 'audio_chunk',
+                        audio_data: base64Audio,
+                        chunk_id: this.generateId()
+                    };
+                    
+                    this.ws.send(JSON.stringify(message));
+                    this.log('📤 Chunk de audio enviado');
+                    
+                } catch (error) {
+                    this.log('❌ Error enviando audio: ' + error);
+                }
+            }
+            
+            sendText() {
+                const text = this.textInput.value.trim();
+                if (!text || !this.isConnected) return;
+                
+                const message = {
+                    type: 'text_input',
+                    text: text
+                };
+                
+                this.ws.send(JSON.stringify(message));
+                this.log('📤 Texto enviado: ' + text);
+                this.textInput.value = '';
+            }
+            
+            handleMessage(data) {
+                switch (data.type) {
+                    case 'connected':
+                        this.log('🎉 ' + data.message);
+                        break;
+                        
+                    case 'transcription':
+                        if (data.text) {
+                            this.transcriptionText.textContent = data.text;
+                            this.log('📝 Transcripción: ' + data.text);
+                        } else {
+                            this.log('🔇 No se detectó voz en el audio');
+                        }
+                        break;
+                        
+                    case 'avatar_video':
+                        this.displayAvatarVideo(data.video_url, data.text);
+                        this.log('🎭 Video de avatar recibido: ' + data.text);
+                        break;
+                        
+                    case 'error':
+                        this.log('❌ Error: ' + data.error);
+                        break;
+                        
+                    case 'audio_received':
+                        this.log('✅ Audio recibido por el servidor');
+                        break;
+                        
+                    case 'text_processing':
+                        this.log('📝 Procesando texto: ' + data.text);
+                        if (data.message) {
+                            this.log('ℹ️ ' + data.message);
+                        }
+                        break;
+                        
+                    default:
+                        console.log('Mensaje no manejado:', data);
+                }
+            }
+            
+            displayAvatarVideo(videoUrl, text) {
+                this.log('🎬 Reproduciendo respuesta del avatar...');
+                
+                // Set up the response video
+                this.avatarVideo.src = videoUrl;
+                
+                // Show response video over background
+                this.avatarVideo.style.display = 'block';
+                this.avatarVideo.style.opacity = '1';
+                
+                // Pause background video and dim it
+                this.backgroundVideo.style.opacity = '0.3';
+                
+                // Auto-play the response video
+                this.avatarVideo.play().catch(e => {
+                    console.log('Auto-play failed:', e);
+                });
+                
+                // When response video ends, return to background
+                this.avatarVideo.onended = () => {
+                    this.log('✅ Respuesta completada, regresando al video de fondo');
+                    this.avatarVideo.style.display = 'none';
+                    this.backgroundVideo.style.opacity = '1';
+                    
+                    // Remove caption after video ends
+                    const existingCaption = document.querySelector('.avatar-caption');
+                    if (existingCaption) {
+                        setTimeout(() => {
+                            existingCaption.remove();
+                        }, 1000);
+                    }
+                };
+                
+                // Handle video load errors
+                this.avatarVideo.onerror = () => {
+                    this.log('❌ Error cargando video de respuesta');
+                    this.avatarVideo.style.display = 'none';
+                    this.backgroundVideo.style.opacity = '1';
+                };
+                
+                // Show what the avatar is "saying"
+                const caption = document.createElement('div');
+                caption.textContent = '💬 ' + text;
+                caption.style.cssText = `
+                    text-align: center;
+                    margin-top: 10px;
+                    font-style: italic;
+                    background: rgba(0,0,0,0.8);
+                    color: white;
+                    padding: 8px 15px;
+                    border-radius: 20px;
+                    font-size: 14px;
+                    position: absolute;
+                    bottom: 10px;
+                    left: 50%;
+                    transform: translateX(-50%);
+                    z-index: 10;
+                    max-width: 80%;
+                    box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+                `;
+                
+                // Remove previous caption
+                const existingCaption = document.querySelector('.avatar-caption');
+                if (existingCaption) {
+                    existingCaption.remove();
+                }
+                
+                caption.className = 'avatar-caption';
+                this.avatarVideo.parentNode.appendChild(caption);
+            }
+            
+            startAudioVisualization() {
+                // Simple fake visualization
+                this.audioVisualizationInterval = setInterval(() => {
+                    const bars = this.audioBars.children;
+                    for (let bar of bars) {
+                        const height = Math.random() * 40 + 5;
+                        bar.style.height = height + 'px';
+                    }
+                }, 100);
+            }
+            
+            stopAudioVisualization() {
+                if (this.audioVisualizationInterval) {
+                    clearInterval(this.audioVisualizationInterval);
+                    this.audioVisualizationInterval = null;
+                }
+                
+                // Reset bars
+                const bars = this.audioBars.children;
+                for (let bar of bars) {
+                    bar.style.height = '5px';
+                }
+            }
+            
+            updateStatus(statusClass, statusText) {
+                this.status.className = `status ${statusClass}`;
+                this.status.textContent = statusText;
+            }
+            
+            log(message) {
+                const timestamp = new Date().toLocaleTimeString();
+                const entry = document.createElement('div');
+                entry.className = 'log-entry';
+                entry.innerHTML = `<span class="timestamp">[${timestamp}]</span> ${message}`;
+                
+                this.logContainer.appendChild(entry);
+                this.logContainer.scrollTop = this.logContainer.scrollHeight;
+            }
+            
+            generateId() {
+                return Math.random().toString(36).substr(2, 9);
+            }
+        }
+        
+        // Initialize the client when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            const client = new RealTimeAvatarClient();
+        });
+    </script>
+</body>
+</html>
